@@ -59,7 +59,7 @@
   - Write unit tests for each document format processing
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 6. Build OCR engine integration
+- [x] 6. Build OCR engine integration
   - Create OCREngine class with EasyOCR initialization for Vietnamese and English
   - Implement PDF page-to-image conversion for scanned documents
   - Add OCR text extraction with configurable DPI and confidence settings

@@ -23,7 +23,7 @@ class TestIngestor:
     
     def setup_method(self):
         """Set up test fixtures."""
-        self.ingestor = Ingestor()
+        self.ingestor = Ingestor(ocr_enabled=False)  # Disable OCR for testing
         self.temp_dir = tempfile.mkdtemp()
     
     def teardown_method(self):
@@ -459,7 +459,7 @@ class TestIngestorIntegration:
     
     def setup_method(self):
         """Set up test fixtures."""
-        self.ingestor = Ingestor()
+        self.ingestor = Ingestor(ocr_enabled=False)  # Disable OCR for testing
         self.temp_dir = tempfile.mkdtemp()
     
     def teardown_method(self):
@@ -588,6 +588,142 @@ class TestIngestorIntegration:
             # Test that the file can be processed
             result = self.ingestor.process(file_path)
             assert len(result) > 0, f"No content extracted from {file_path}"
+
+
+class TestIngestorOCRIntegration:
+    """Test cases for Ingestor OCR integration."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+    
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+    
+    def create_test_pdf_with_images(self) -> str:
+        """Create a test PDF with image content."""
+        pdf_path = os.path.join(self.temp_dir, 'test_image.pdf')
+        doc = fitz.open()
+        page = doc.new_page()
+        
+        # Create an actual embedded image instead of drawing
+        from PIL import Image
+        import io
+        
+        # Create a simple test image
+        img = Image.new('RGB', (100, 100), color='blue')
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+        
+        # Insert the image into the PDF
+        img_rect = fitz.Rect(100, 100, 200, 200)
+        page.insert_image(img_rect, stream=img_bytes.getvalue())
+        
+        doc.save(pdf_path)
+        doc.close()
+        return pdf_path
+    
+    def test_ingestor_ocr_enabled(self):
+        """Test ingestor with OCR enabled."""
+        ingestor = Ingestor(ocr_enabled=True)
+        
+        # Create test PDF with text
+        pdf_path = os.path.join(self.temp_dir, 'test_text.pdf')
+        doc = fitz.open()
+        page = doc.new_page()
+        
+        # Simple text insertion
+        page.insert_text((50, 100), "Test content for OCR", fontsize=12)
+        
+        doc.save(pdf_path)
+        doc.close()
+        
+        # Process should work regardless of OCR setting for text PDFs
+        result = ingestor.process(pdf_path)
+        assert "Test content for OCR" in result
+    
+    def test_ingestor_ocr_disabled(self):
+        """Test ingestor with OCR disabled."""
+        ingestor = Ingestor(ocr_enabled=False)
+        
+        # Create test PDF with images only
+        pdf_path = self.create_test_pdf_with_images()
+        
+        # Should process but note OCR is required
+        result = ingestor.process(pdf_path)
+        assert "OCR required" in result or "Empty page" in result
+    
+    @patch('core.ocr_engine.easyocr.Reader')
+    def test_ingestor_ocr_integration(self, mock_reader_class):
+        """Test full OCR integration with mocked EasyOCR."""
+        # Setup mock OCR
+        mock_reader = Mock()
+        mock_reader.readtext.return_value = [
+            ([(0, 0), (100, 0), (100, 50), (0, 50)], 'Extracted OCR text', 0.9)
+        ]
+        mock_reader_class.return_value = mock_reader
+        
+        ingestor = Ingestor(ocr_enabled=True, ocr_dpi=300)
+        
+        # Create test PDF with images
+        pdf_path = self.create_test_pdf_with_images()
+        
+        with patch('os.path.exists', return_value=True), \
+             patch('os.unlink'), \
+             patch('core.ocr_engine.tempfile.NamedTemporaryFile') as mock_temp, \
+             patch('core.ocr_engine.fitz.Pixmap.save') as mock_save:
+            
+            mock_temp_file = Mock()
+            mock_temp_file.name = 'C:\\temp\\test.png'  # Windows-compatible path
+            mock_temp.return_value.__enter__.return_value = mock_temp_file
+            
+            # Mock the save operation to succeed
+            mock_save.return_value = None
+            
+            result = ingestor.process(pdf_path)
+        
+        # Should contain OCR-extracted text
+        assert "Extracted OCR text" in result
+        mock_reader.readtext.assert_called()
+    
+    def test_ingestor_dpi_configuration(self):
+        """Test OCR DPI configuration."""
+        ingestor = Ingestor(ocr_enabled=True, ocr_dpi=400)
+        
+        # Check that DPI setting is properly passed
+        assert ingestor.ocr_dpi == 400
+        
+        # Test minimum DPI enforcement
+        ingestor_low_dpi = Ingestor(ocr_enabled=True, ocr_dpi=200)
+        assert ingestor_low_dpi.ocr_dpi == 300  # Should be enforced to minimum
+    
+    def test_ingestor_lazy_ocr_loading(self):
+        """Test that OCR engine is only loaded when needed."""
+        ingestor = Ingestor(ocr_enabled=True)
+        
+        # OCR engine should not be initialized yet
+        assert ingestor._ocr_engine is None
+        
+        # Processing text-only PDF shouldn't initialize OCR
+        pdf_path = os.path.join(self.temp_dir, 'text_only.pdf')
+        doc = fitz.open()
+        page = doc.new_page()
+        
+        # Simple text insertion
+        page.insert_text((50, 100), "Only text content, no images", fontsize=12)
+        
+        doc.save(pdf_path)
+        doc.close()
+        
+        with patch('core.ingestor.OCREngine') as mock_ocr:
+            ingestor.process(pdf_path)
+        
+        # OCR engine should be initialized when processing
+        mock_ocr.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ from .exceptions import (
     ErrorSeverity,
     handle_error
 )
+from .ocr_engine import OCREngine
 
 
 logger = logging.getLogger(__name__)
@@ -80,9 +81,18 @@ class Ingestor(ProcessorInterface):
         '.csv': 'text/csv'
     }
     
-    def __init__(self):
-        """Initialize the Ingestor."""
+    def __init__(self, ocr_enabled: bool = True, ocr_dpi: int = 350):
+        """
+        Initialize the Ingestor.
+        
+        Args:
+            ocr_enabled: Enable OCR processing for scanned PDFs (default: True)
+            ocr_dpi: DPI setting for OCR processing (default: 350, minimum: 300)
+        """
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.ocr_enabled = ocr_enabled
+        self._ocr_engine = None
+        self.ocr_dpi = max(ocr_dpi, 300)  # Enforce minimum 300 DPI
         
     def supports_format(self, file_path: str) -> bool:
         """
@@ -158,6 +168,17 @@ class Ingestor(ProcessorInterface):
                 context={'file_path': file_path, 'operation': 'format_detection'}
             )
     
+    def _get_ocr_engine(self) -> OCREngine:
+        """
+        Get or initialize OCR engine with lazy loading.
+        
+        Returns:
+            Initialized OCR engine instance
+        """
+        if self._ocr_engine is None:
+            self._ocr_engine = OCREngine(dpi=self.ocr_dpi)
+        return self._ocr_engine
+    
     def process(self, file_path: str) -> str:
         """
         Process a file and extract text content.
@@ -204,7 +225,9 @@ class Ingestor(ProcessorInterface):
     
     def process_pdf(self, file_path: str) -> str:
         """
-        Extract text from PDF files using PyMuPDF.
+        Extract text from PDF files using PyMuPDF and OCR fallback.
+        
+        Uses direct text extraction first, falls back to OCR for scanned pages.
         
         Args:
             file_path: Path to the PDF file
@@ -217,45 +240,13 @@ class Ingestor(ProcessorInterface):
             LangExtractorError: For PDF processing errors
         """
         try:
-            doc = fitz.open(file_path)
-            text_content = []
-            has_images = False
+            # If OCR is enabled, use the OCR engine which handles both direct text and OCR
+            if self.ocr_enabled:
+                ocr_engine = self._get_ocr_engine()
+                return ocr_engine.extract_text_from_pdf(file_path, ocr_enabled=True)
             
-            for page_num in range(len(doc)):
-                page = doc.load_page(page_num)
-                
-                # Extract text
-                page_text = page.get_text()
-                
-                # Check if page has images (potential scanned content)
-                image_list = page.get_images()
-                if image_list:
-                    has_images = True
-                    self.logger.debug(f"Page {page_num + 1} contains {len(image_list)} images")
-                
-                # If no text but has images, this might need OCR
-                if not page_text.strip() and image_list:
-                    self.logger.warning(
-                        f"Page {page_num + 1} has no extractable text but contains images. "
-                        "OCR processing may be needed."
-                    )
-                    page_text = f"[Page {page_num + 1}: Contains images but no extractable text - OCR required]"
-                
-                if page_text.strip():
-                    text_content.append(f"--- Page {page_num + 1} ---\n{page_text}")
-            
-            doc.close()
-            
-            if not text_content:
-                if has_images:
-                    return "[PDF contains only images - OCR processing required]"
-                else:
-                    return "[PDF contains no extractable text]"
-            
-            full_text = "\n\n".join(text_content)
-            self.logger.info(f"Extracted {len(full_text)} characters from PDF with {len(doc)} pages")
-            
-            return full_text
+            # Fallback to direct text extraction only
+            return self._extract_text_direct_only(file_path)
             
         except fitz.FileDataError as e:
             raise FileAccessError(
@@ -275,6 +266,57 @@ class Ingestor(ProcessorInterface):
                 self.logger,
                 context={'file_path': file_path, 'operation': 'pdf_processing'}
             )
+    
+    def _extract_text_direct_only(self, file_path: str) -> str:
+        """
+        Extract text from PDF using only direct text extraction (no OCR).
+        
+        Args:
+            file_path: Path to the PDF file
+            
+        Returns:
+            Extracted text content
+        """
+        doc = fitz.open(file_path)
+        text_content = []
+        has_images = False
+        page_count = len(doc)
+        
+        for page_num in range(page_count):
+            page = doc.load_page(page_num)
+            
+            # Extract text
+            page_text = page.get_text()
+            
+            # Check if page has images (potential scanned content)
+            image_list = page.get_images()
+            if image_list:
+                has_images = True
+                self.logger.debug(f"Page {page_num + 1} contains {len(image_list)} images")
+            
+            # If no text but has images, note that OCR is needed
+            if not page_text.strip() and image_list:
+                self.logger.warning(
+                    f"Page {page_num + 1} has no extractable text but contains images. "
+                    "OCR processing may be needed."
+                )
+                page_text = f"[Page {page_num + 1}: Contains images but no extractable text - OCR required]"
+            
+            if page_text.strip():
+                text_content.append(f"--- Page {page_num + 1} ---\n{page_text}")
+        
+        doc.close()
+        
+        if not text_content:
+            if has_images:
+                return "[PDF contains only images - OCR processing required]"
+            else:
+                return "[PDF contains no extractable text]"
+        
+        full_text = "\n\n".join(text_content)
+        self.logger.info(f"Extracted {len(full_text)} characters from PDF with {page_count} pages")
+        
+        return full_text
     
     def process_docx(self, file_path: str) -> str:
         """

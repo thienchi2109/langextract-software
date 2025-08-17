@@ -359,7 +359,10 @@ def handle_error(
     
     # If it's already a LangExtractorError, just log and return
     if isinstance(error, LangExtractorError):
-        logger.error(f"Application error: {error.message}", extra=error.to_dict())
+        error_dict = error.to_dict()
+        error_dict.pop('message', None)
+        error_dict.pop('asctime', None)
+        logger.error(f"Application error: {error.message}", extra={'error_details': error_dict})
         return error
     
     # Convert common exception types
@@ -402,5 +405,9 @@ def handle_error(
     # Create a copy of the error dict without 'message' to avoid logging conflicts
     error_dict = lang_error.to_dict()
     error_dict.pop('message', None)  # Remove message to avoid conflict with logging
-    logger.error(f"Handled error: {lang_error.message}", extra=error_dict)
+    
+    # Also remove 'asctime' if present to avoid another logging conflict
+    error_dict.pop('asctime', None)
+    
+    logger.error(f"Handled error: {lang_error.message}", extra={'error_details': error_dict})
     return lang_error
