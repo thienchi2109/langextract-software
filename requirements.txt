@@ -1,0 +1,27 @@
+# GUI Framework
+PySide6>=6.5.0
+
+# Document Processing
+PyMuPDF>=1.23.0
+python-docx>=0.8.11
+openpyxl>=3.1.0
+
+# OCR
+easyocr>=1.7.0
+
+# AI/ML
+langextract>=0.1.0
+google-generativeai>=0.3.0
+
+# Data Processing
+pandas>=2.0.0
+xlsxwriter>=3.1.0
+
+# Utilities
+requests>=2.31.0
+Pillow>=10.0.0
+keyring>=24.0.0
+
+# Development/Testing (optional)
+pytest>=7.4.0
+pytest-qt>=4.2.0
