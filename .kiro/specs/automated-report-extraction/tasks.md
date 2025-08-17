@@ -1,22 +1,12 @@
 # Implementation Plan
 
 - [x] 1. Set up project structure and core interfaces
-
-
-
-
-
   - Create directory structure for gui/, core/, and assets/ components
   - Define base interfaces and data classes for templates, results, and configuration
   - Set up logging configuration and error handling framework
   - _Requirements: 10.1, 10.3_
 
 - [x] 2. Implement secure credential management
-
-
-
-
-
   - Create KeychainManager class using Windows Credential Manager
   - Implement API key storage, retrieval, and deletion methods
   - Add API key validation by testing Gemini API access
@@ -24,11 +14,6 @@
   - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
 - [x] 3. Create configuration and template management system
-
-
-
-
-
   - Implement AppConfig dataclass with default settings
   - Create TemplateManager for saving/loading extraction templates as JSON
   - Add template validation and error handling for corrupted templates
@@ -36,11 +21,6 @@
   - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
 - [x] 4. Build PII masking system
-
-
-
-
-
   - Create PIIMasker class with regex patterns for Vietnamese PII formats
   - Implement masking methods for account numbers, ID numbers, emails, and phone numbers
   - Add mask_for_cloud method that applies all masking rules while preserving context
@@ -48,10 +28,6 @@
   - _Requirements: 4.1, 4.2, 4.3_
 
 - [x] 5. Implement document ingestion system
-
-
-
-
   - Create Ingestor class with format detection capabilities
   - Implement PDF text extraction using PyMuPDF with fallback detection
   - Add DOCX text extraction using python-docx for paragraphs and tables
@@ -67,7 +43,7 @@
   - Write unit tests for OCR functionality with sample images
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 7. Implement Gemini API integration for proofreading
+- [x] 7. Implement Gemini API integration for proofreading
   - Create Proofreader class with Gemini API client setup
   - Implement Vietnamese text correction with system prompts
   - Add enable/disable toggle for offline processing mode

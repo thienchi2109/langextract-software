@@ -253,3 +253,22 @@ class CredentialManagerInterface(ABC):
     def delete_api_key(self) -> bool:
         """Delete stored API key."""
         pass
+
+
+class ProofreaderInterface(ABC):
+    """Base interface for text proofreading."""
+    
+    @abstractmethod
+    def proofread(self, text: str) -> str:
+        """Proofread and correct Vietnamese text."""
+        pass
+    
+    @abstractmethod
+    def is_enabled(self) -> bool:
+        """Check if proofreading is enabled."""
+        pass
+    
+    @abstractmethod
+    def set_enabled(self, enabled: bool) -> None:
+        """Enable or disable proofreading."""
+        pass

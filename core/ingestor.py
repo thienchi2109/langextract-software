@@ -27,6 +27,7 @@ from .exceptions import (
     handle_error
 )
 from .ocr_engine import OCREngine
+from .proofreader import Proofreader
 
 
 logger = logging.getLogger(__name__)
@@ -81,18 +82,31 @@ class Ingestor(ProcessorInterface):
         '.csv': 'text/csv'
     }
     
-    def __init__(self, ocr_enabled: bool = True, ocr_dpi: int = 350):
+    def __init__(
+        self,
+        ocr_enabled: bool = True,
+        ocr_dpi: int = 350,
+        proofreading_enabled: bool = False,
+        proofreading_mode: str = 'auto'
+    ):
         """
         Initialize the Ingestor.
         
         Args:
             ocr_enabled: Enable OCR processing for scanned PDFs (default: True)
             ocr_dpi: DPI setting for OCR processing (default: 350, minimum: 300)
+            proofreading_enabled: Enable Vietnamese text proofreading (default: False)
+            proofreading_mode: Proofreading correction mode (default: 'auto')
         """
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.ocr_enabled = ocr_enabled
         self._ocr_engine = None
         self.ocr_dpi = max(ocr_dpi, 300)  # Enforce minimum 300 DPI
+        
+        # Proofreading configuration
+        self.proofreading_enabled = proofreading_enabled
+        self.proofreading_mode = proofreading_mode
+        self._proofreader = None
         
     def supports_format(self, file_path: str) -> bool:
         """
@@ -179,6 +193,20 @@ class Ingestor(ProcessorInterface):
             self._ocr_engine = OCREngine(dpi=self.ocr_dpi)
         return self._ocr_engine
     
+    def _get_proofreader(self) -> Proofreader:
+        """
+        Get or initialize proofreader with lazy loading.
+        
+        Returns:
+            Initialized Proofreader instance
+        """
+        if self._proofreader is None:
+            self._proofreader = Proofreader(
+                enabled=self.proofreading_enabled,
+                correction_mode=self.proofreading_mode
+            )
+        return self._proofreader
+    
     def process(self, file_path: str) -> str:
         """
         Process a file and extract text content.
@@ -187,7 +215,7 @@ class Ingestor(ProcessorInterface):
             file_path: Path to the file to process
             
         Returns:
-            Extracted text content
+            Extracted text content (with optional proofreading)
             
         Raises:
             FileAccessError: If file cannot be accessed
@@ -199,20 +227,33 @@ class Ingestor(ProcessorInterface):
             
             self.logger.info(f"Processing {file_format} file: {file_path}")
             
+            # Extract raw text based on file format
             if file_format == 'pdf':
-                return self.process_pdf(file_path)
+                text = self.process_pdf(file_path)
             elif file_format in ['docx', 'doc']:
-                return self.process_docx(file_path)
+                text = self.process_docx(file_path)
             elif file_format in ['xlsx', 'xls']:
-                return self.process_excel(file_path)
+                text = self.process_excel(file_path)
             elif file_format == 'csv':
-                return self.process_csv(file_path)
+                text = self.process_csv(file_path)
             else:
                 raise ValidationError(
                     f"No processor available for format: {file_format}",
                     field_name="file_format",
                     field_value=file_format
                 )
+            
+            # Apply proofreading if enabled
+            if self.proofreading_enabled and text:
+                try:
+                    proofreader = self._get_proofreader()
+                    text = proofreader.proofread(text)
+                    self.logger.debug("Text proofreading completed successfully")
+                except Exception as e:
+                    self.logger.warning(f"Proofreading failed, using original text: {str(e)}")
+                    # Continue with original text on proofreading failure
+            
+            return text
                 
         except (FileAccessError, ValidationError, LangExtractorError):
             raise

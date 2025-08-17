@@ -726,5 +726,249 @@ class TestIngestorOCRIntegration:
         mock_ocr.assert_called_once()
 
 
+class TestIngestorProofreadingIntegration:
+    """Test cases for Ingestor proofreading integration."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+    
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+    
+    def create_temp_file(self, filename: str, content: bytes = b"test content") -> str:
+        """Create a temporary file for testing."""
+        file_path = os.path.join(self.temp_dir, filename)
+        with open(file_path, 'wb') as f:
+            f.write(content)
+        return file_path
+    
+    def test_ingestor_proofreading_initialization(self):
+        """Test Ingestor initialization with proofreading parameters."""
+        # Test default proofreading disabled
+        ingestor = Ingestor()
+        assert ingestor.proofreading_enabled is False
+        assert ingestor.proofreading_mode == 'auto'
+        assert ingestor._proofreader is None
+        
+        # Test proofreading enabled
+        ingestor = Ingestor(
+            proofreading_enabled=True,
+            proofreading_mode='business'
+        )
+        assert ingestor.proofreading_enabled is True
+        assert ingestor.proofreading_mode == 'business'
+        assert ingestor._proofreader is None  # Lazy initialization
+    
+    def test_get_proofreader_lazy_loading(self):
+        """Test lazy loading of proofreader."""
+        ingestor = Ingestor(
+            proofreading_enabled=True,
+            proofreading_mode='minimal'
+        )
+        
+        # First call should create proofreader
+        proofreader1 = ingestor._get_proofreader()
+        assert proofreader1 is not None
+        assert ingestor._proofreader is proofreader1
+        
+        # Second call should return same instance
+        proofreader2 = ingestor._get_proofreader()
+        assert proofreader2 is proofreader1
+        
+        # Verify proofreader configuration
+        assert proofreader1.enabled is True
+        assert proofreader1.correction_mode == 'minimal'
+    
+    @patch('core.ingestor.Proofreader')
+    def test_process_with_proofreading_enabled(self, mock_proofreader_class):
+        """Test document processing with proofreading enabled."""
+        # Setup mocks
+        mock_proofreader = Mock()
+        mock_proofreader.proofread.return_value = "Corrected Vietnamese text"
+        mock_proofreader_class.return_value = mock_proofreader
+        
+        # Create test document
+        doc = Document()
+        doc.add_paragraph("Original Vietnamese text with errors")
+        
+        docx_path = os.path.join(self.temp_dir, "test_proofread.docx")
+        doc.save(docx_path)
+        
+        # Process with proofreading enabled
+        ingestor = Ingestor(
+            ocr_enabled=False,
+            proofreading_enabled=True,
+            proofreading_mode='business'
+        )
+        
+        result = ingestor.process(docx_path)
+        
+        # Verify proofreader was called
+        mock_proofreader.proofread.assert_called_once()
+        assert result == "Corrected Vietnamese text"
+    
+    @patch('core.ingestor.Proofreader')
+    def test_process_with_proofreading_disabled(self, mock_proofreader_class):
+        """Test document processing with proofreading disabled."""
+        # Create test document
+        doc = Document()
+        doc.add_paragraph("Original Vietnamese text")
+        
+        docx_path = os.path.join(self.temp_dir, "test_no_proofread.docx")
+        doc.save(docx_path)
+        
+        # Process with proofreading disabled
+        ingestor = Ingestor(
+            ocr_enabled=False,
+            proofreading_enabled=False
+        )
+        
+        result = ingestor.process(docx_path)
+        
+        # Verify proofreader was not created or called
+        mock_proofreader_class.assert_not_called()
+        assert "Original Vietnamese text" in result
+    
+    @patch('core.ingestor.Proofreader')
+    def test_process_proofreading_error_fallback(self, mock_proofreader_class):
+        """Test that processing continues with original text when proofreading fails."""
+        # Setup mock to raise exception
+        mock_proofreader = Mock()
+        mock_proofreader.proofread.side_effect = Exception("Proofreading failed")
+        mock_proofreader_class.return_value = mock_proofreader
+        
+        # Create test document
+        doc = Document()
+        doc.add_paragraph("Original text")
+        
+        docx_path = os.path.join(self.temp_dir, "test_proofread_error.docx")
+        doc.save(docx_path)
+        
+        # Process with proofreading enabled
+        ingestor = Ingestor(
+            ocr_enabled=False,
+            proofreading_enabled=True
+        )
+        
+        result = ingestor.process(docx_path)
+        
+        # Should return original text on proofreading error
+        assert "Original text" in result
+    
+    def test_process_empty_text_proofreading(self):
+        """Test proofreading behavior with empty text."""
+        # Create empty document
+        doc = Document()
+        
+        docx_path = os.path.join(self.temp_dir, "empty.docx")
+        doc.save(docx_path)
+        
+        ingestor = Ingestor(
+            ocr_enabled=False,
+            proofreading_enabled=True
+        )
+        
+        result = ingestor.process(docx_path)
+        
+        # Should handle empty text gracefully
+        # For empty DOCX files, Ingestor returns a standard message
+        assert "[DOCX file contains no extractable text]" in result
+    
+    @patch('core.ingestor.Proofreader')
+    def test_combined_ocr_and_proofreading(self, mock_proofreader_class):
+        """Test processing with both OCR and proofreading enabled."""
+        # Setup proofreader mock
+        mock_proofreader = Mock()
+        mock_proofreader.proofread.return_value = "Corrected OCR text"
+        mock_proofreader_class.return_value = mock_proofreader
+        
+        # Create a simple PDF for OCR testing
+        pdf_path = os.path.join(self.temp_dir, "test_ocr_proofread.pdf")
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((50, 50), "OCR text with errors")
+        doc.save(pdf_path)
+        doc.close()
+        
+        # Process with both OCR and proofreading enabled
+        ingestor = Ingestor(
+            ocr_enabled=True,
+            proofreading_enabled=True,
+            proofreading_mode='minimal'
+        )
+        
+        with patch('core.ingestor.OCREngine') as mock_ocr_class:
+            mock_ocr = Mock()
+            mock_ocr.extract_text_from_pdf.return_value = "OCR extracted text"
+            mock_ocr_class.return_value = mock_ocr
+            
+            result = ingestor.process(pdf_path)
+        
+        # Verify both OCR and proofreading were called
+        mock_ocr.extract_text_from_pdf.assert_called_once()
+        mock_proofreader.proofread.assert_called_once_with("OCR extracted text")
+        assert result == "Corrected OCR text"
+    
+    def test_proofreading_mode_configuration(self):
+        """Test different proofreading mode configurations."""
+        modes_to_test = ['auto', 'minimal', 'business', 'number_lock']
+        
+        for mode in modes_to_test:
+            ingestor = Ingestor(
+                proofreading_enabled=True,
+                proofreading_mode=mode
+            )
+            
+            proofreader = ingestor._get_proofreader()
+            assert proofreader.correction_mode == mode
+    
+    @patch('core.ingestor.Proofreader')
+    def test_proofreading_with_different_file_formats(self, mock_proofreader_class):
+        """Test proofreading integration with different file formats."""
+        # Setup mock
+        mock_proofreader = Mock()
+        mock_proofreader.proofread.return_value = "Corrected text"
+        mock_proofreader_class.return_value = mock_proofreader
+        
+        ingestor = Ingestor(
+            ocr_enabled=False,
+            proofreading_enabled=True
+        )
+        
+        # Test with DOCX
+        doc = Document()
+        doc.add_paragraph("Test text")
+        docx_path = os.path.join(self.temp_dir, "test.docx")
+        doc.save(docx_path)
+        
+        result = ingestor.process(docx_path)
+        assert result == "Corrected text"
+        
+        # Test with Excel
+        wb = Workbook()
+        ws = wb.active
+        ws['A1'] = "Excel text"
+        xlsx_path = os.path.join(self.temp_dir, "test.xlsx")
+        wb.save(xlsx_path)
+        
+        result = ingestor.process(xlsx_path)
+        assert result == "Corrected text"
+        
+        # Test with CSV
+        df = pd.DataFrame({'col1': ['CSV text']})
+        csv_path = os.path.join(self.temp_dir, "test.csv")
+        df.to_csv(csv_path, index=False)
+        
+        result = ingestor.process(csv_path)
+        assert result == "Corrected text"
+        
+        # Verify proofreader was called for all formats
+        assert mock_proofreader.proofread.call_count == 3
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
