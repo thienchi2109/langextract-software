@@ -29,9 +29,10 @@ def main():
         
         logger = get_logger(__name__)
         logger.info("Starting Automated Report Extraction System")
-        
-        # TODO: Initialize GUI application
-        logger.info("Application initialized successfully")
+
+        # Initialize GUI application
+        from app.app import main as gui_main
+        return gui_main()
         
     except LangExtractorError as e:
         print(f"Application Error: {e.get_user_message()}")

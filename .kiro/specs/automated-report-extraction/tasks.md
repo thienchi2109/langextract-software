@@ -75,7 +75,7 @@
   - Write unit tests for Excel generation with sample data
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 11. Create main window GUI framework
+- [x] 11. Create main window GUI framework
   - Implement MainWindow class using PySide6 with drag-drop interface
   - Add file list display with format detection and status indicators
   - Create progress tracking with cancellation support
