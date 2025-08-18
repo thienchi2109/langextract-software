@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QAction, QIcon, QDragEnterEvent, QDropEvent, QDragMoveEvent, QPainter, QPen
 from gui.theme import get_theme_manager
+from gui.preview_panel import PreviewPanel
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +288,7 @@ class MainWindow(QMainWindow):
         return panel
     
     def create_preview_panel(self) -> QWidget:
-        """Create preview/settings panel."""
+        """Create preview panel with extraction results display."""
         panel = QFrame()
         panel.setFrameShape(QFrame.Box)
         layout = QVBoxLayout(panel)
@@ -299,13 +300,9 @@ class MainWindow(QMainWindow):
         title_label.setStyleSheet("font-size: 14pt; font-weight: 600;")
         layout.addWidget(title_label)
         
-        # Placeholder content
-        placeholder_label = QLabel("Preview and settings will be displayed here")
-        placeholder_label.setAlignment(Qt.AlignCenter)
-        placeholder_label.setStyleSheet("color: #6B7280; font-style: italic;")
-        layout.addWidget(placeholder_label)
-        
-        layout.addStretch()
+        # Create preview panel
+        self.preview_panel = PreviewPanel()
+        layout.addWidget(self.preview_panel, 1)  # Give it stretch factor of 1
         
         # Process button
         self.process_btn = QPushButton("Start Processing")
@@ -418,6 +415,7 @@ class MainWindow(QMainWindow):
         """Setup signal connections."""
         self.file_list.files_changed.connect(self.update_ui_state)
         self.file_list.itemSelectionChanged.connect(self.update_ui_state)
+        self.file_list.itemSelectionChanged.connect(self.on_file_selection_changed)
         
         # Theme change signal
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
@@ -437,6 +435,253 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("Ready")
         else:
             self.status_bar.showMessage(f"{file_count} file(s) loaded")
+    
+    def on_file_selection_changed(self):
+        """Handle file selection changes to update preview."""
+        selected_items = self.file_list.selectedItems()
+        
+        if not selected_items:
+            # No file selected, show empty state
+            self.preview_panel.clear_preview()
+            return
+        
+        # Get selected file path
+        selected_item = selected_items[0]  # Single selection for now
+        file_path = selected_item.data(Qt.UserRole)
+        
+        # For now, show a mock extraction result since we don't have processing yet
+        # TODO: Replace with actual extraction results when processing is implemented
+        self.show_mock_preview(file_path)
+    
+    def show_mock_preview(self, file_path: str):
+        """Show mock preview data for demonstration purposes with varied scenarios."""
+        from core.models import ExtractionResult, ProcessingStatus
+        import random
+        import time
+        from pathlib import Path
+        
+        # Create varied mock data based on file type and name
+        file_name = Path(file_path).name.lower()
+        
+        # Determine mock scenario based on filename
+        if "error" in file_name or "corrupt" in file_name:
+            # Failed processing scenario
+            mock_result = ExtractionResult(
+                source_file=file_path,
+                extracted_data={},
+                confidence_scores={},
+                processing_time=0.8,
+                errors=["OCR failed - document appears to be corrupted", "Unable to extract readable text"],
+                status=ProcessingStatus.FAILED
+            )
+        elif "pending" in file_name or "queue" in file_name:
+            # Pending processing scenario
+            mock_result = ExtractionResult(
+                source_file=file_path,
+                extracted_data={},
+                confidence_scores={},
+                processing_time=0.0,
+                errors=[],
+                status=ProcessingStatus.PENDING
+            )
+        elif "processing" in file_name:
+            # Currently processing scenario
+            mock_result = ExtractionResult(
+                source_file=file_path,
+                extracted_data={
+                    "company_name": "DataTech Solutions Inc.",
+                    "revenue": None,  # Still being processed
+                    "quarter": "Q4 2024"
+                },
+                confidence_scores={
+                    "company_name": 0.89,
+                    "quarter": 0.82
+                },
+                processing_time=0.0,
+                errors=[],
+                status=ProcessingStatus.PROCESSING
+            )
+        else:
+            # Successful processing with realistic variance
+            company_names = [
+                "TechCorp Solutions Ltd.", "Global Industries Inc.", "Innovation Partners LLC",
+                "Data Analytics Co.", "Future Systems Group", "Digital Transform Ltd."
+            ]
+            quarters = ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024"]
+            
+            # Generate realistic but varied data
+            base_revenue = random.randint(500000, 5000000)
+            employee_count = random.randint(50, 1000)
+            
+            mock_result = ExtractionResult(
+                source_file=file_path,
+                extracted_data={
+                    "company_name": random.choice(company_names),
+                    "revenue": base_revenue + random.randint(-100000, 100000),
+                    "quarter": random.choice(quarters),
+                    "contact_email": f"ir@{file_name.split('.')[0].replace('_', '').replace('-', '')}.com",
+                    "employee_count": employee_count,
+                    "profit_margin": round(random.uniform(5.0, 25.0), 1),
+                    "growth_rate": round(random.uniform(-5.0, 15.0), 1)
+                },
+                confidence_scores={
+                    "company_name": random.uniform(0.85, 0.98),
+                    "revenue": random.uniform(0.70, 0.95),
+                    "quarter": random.uniform(0.88, 0.97),
+                    "contact_email": random.uniform(0.60, 0.85),
+                    "employee_count": random.uniform(0.40, 0.80),
+                    "profit_margin": random.uniform(0.45, 0.75),
+                    "growth_rate": random.uniform(0.35, 0.70)
+                },
+                processing_time=random.uniform(1.2, 4.8),
+                errors=[],
+                status=ProcessingStatus.COMPLETED
+            )
+        
+        # Enhanced template fields with more variety
+        mock_template_fields = [
+            {
+                "name": "company_name", 
+                "type": "text", 
+                "description": "Legal company name as registered",
+                "optional": False
+            },
+            {
+                "name": "revenue", 
+                "type": "currency", 
+                "description": "Total revenue for the reporting period",
+                "optional": False
+            },
+            {
+                "name": "quarter", 
+                "type": "text", 
+                "description": "Reporting quarter (Q1, Q2, Q3, Q4)",
+                "optional": False
+            },
+            {
+                "name": "contact_email", 
+                "type": "text", 
+                "description": "Investor relations or main contact email",
+                "optional": True
+            },
+            {
+                "name": "employee_count", 
+                "type": "number", 
+                "description": "Total number of employees",
+                "optional": True
+            },
+            {
+                "name": "profit_margin", 
+                "type": "number", 
+                "description": "Profit margin percentage",
+                "optional": True
+            },
+            {
+                "name": "growth_rate", 
+                "type": "number", 
+                "description": "Year-over-year growth rate percentage",
+                "optional": True
+            }
+        ]
+        
+        # Update preview with enhanced data
+        self.preview_panel.update_file_preview(mock_result, mock_template_fields)
+        
+        # Also update summary if we have multiple files
+        self.update_mock_summary()
+    
+    def update_mock_summary(self):
+        """Update summary preview with mock session data for all files."""
+        from core.models import (
+            ProcessingSession, ExtractionTemplate, ExtractionField, FieldType,
+            ExtractionResult, ProcessingStatus
+        )
+        from pathlib import Path
+        import random
+        
+        # Get all file paths
+        file_paths = self.file_list.get_file_paths()
+        
+        if not file_paths:
+            self.preview_panel.clear_preview()
+            return
+        
+        # Create mock template
+        template = ExtractionTemplate(
+            name="financial_reports_template",
+            prompt_description="Extract financial data from quarterly and annual reports",
+            fields=[
+                ExtractionField("company_name", FieldType.TEXT, "Legal company name"),
+                ExtractionField("revenue", FieldType.CURRENCY, "Total revenue"),
+                ExtractionField("quarter", FieldType.TEXT, "Reporting quarter"),
+                ExtractionField("contact_email", FieldType.TEXT, "Contact email"),
+                ExtractionField("employee_count", FieldType.NUMBER, "Employee count"),
+                ExtractionField("profit_margin", FieldType.NUMBER, "Profit margin %"),
+                ExtractionField("growth_rate", FieldType.NUMBER, "Growth rate %")
+            ]
+        )
+        
+        # Generate mock results for all files
+        mock_results = []
+        for file_path in file_paths:
+            file_name = Path(file_path).name.lower()
+            
+            if "error" in file_name or "corrupt" in file_name:
+                result = ExtractionResult(
+                    source_file=file_path,
+                    extracted_data={},
+                    confidence_scores={},
+                    processing_time=0.5,
+                    errors=["Processing failed"],
+                    status=ProcessingStatus.FAILED
+                )
+            elif "pending" in file_name:
+                result = ExtractionResult(
+                    source_file=file_path,
+                    extracted_data={},
+                    confidence_scores={},
+                    processing_time=0.0,
+                    errors=[],
+                    status=ProcessingStatus.PENDING
+                )
+            else:
+                # Generate successful result
+                result = ExtractionResult(
+                    source_file=file_path,
+                    extracted_data={
+                        "company_name": f"Company {len(mock_results) + 1} Ltd.",
+                        "revenue": random.randint(500000, 3000000),
+                        "quarter": random.choice(["Q1 2024", "Q2 2024", "Q3 2024"]),
+                        "contact_email": f"contact{len(mock_results) + 1}@company.com",
+                        "employee_count": random.randint(50, 500),
+                        "profit_margin": round(random.uniform(8.0, 20.0), 1),
+                        "growth_rate": round(random.uniform(-2.0, 12.0), 1)
+                    },
+                    confidence_scores={
+                        "company_name": random.uniform(0.85, 0.98),
+                        "revenue": random.uniform(0.70, 0.92),
+                        "quarter": random.uniform(0.88, 0.96),
+                        "contact_email": random.uniform(0.60, 0.80),
+                        "employee_count": random.uniform(0.45, 0.75),
+                        "profit_margin": random.uniform(0.50, 0.70),
+                        "growth_rate": random.uniform(0.40, 0.65)
+                    },
+                    processing_time=random.uniform(1.5, 4.0),
+                    errors=[],
+                    status=ProcessingStatus.COMPLETED
+                )
+            
+            mock_results.append(result)
+        
+        # Create mock session
+        session = ProcessingSession(
+            template=template,
+            files=file_paths,
+            results=mock_results
+        )
+        
+        # Update summary preview
+        self.preview_panel.update_summary_preview(session)
     
     def update_theme_button(self):
         """Update theme toggle button appearance."""
