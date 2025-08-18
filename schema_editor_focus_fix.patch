@@ -1,0 +1,79 @@
+--- a/gui/schema_editor.py
++++ b/gui/schema_editor.py
+@@ -215,9 +215,11 @@ class SchemaEditor(QDialog):
+             }
+             
+             QPushButton:focus {
+-                outline: 2px solid #0d6efd;
+-                outline-offset: 2px;
++                border: 2px solid #0d6efd;
++                padding: 7px 15px;
++                margin: 0px;
+             }
++            min-width: 60px;
+             
+             QPushButton:disabled {
+                 background-color: #f8f9fa;
+@@ -235,6 +237,12 @@ class SchemaEditor(QDialog):
+                 background-color: #0b5ed7;
+                 border-color: #0a58ca;
+             }
++            
++            QPushButton[class="primary"]:focus {
++                border: 2px solid #ffffff;
++                padding: 7px 15px;
++                margin: 0px;
++            }
+             
+             QTableWidget {
+                 background-color: white;
+@@ -291,6 +299,38 @@ class SchemaEditor(QDialog):
+                 border-color: #0d6efd;
+                 image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOSIgdmlld0JveD0iMCAwIDEyIDkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xMC42IDEuNEw0LjIgNy44TDEuNCA1IiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K);
+             }
++            
++            /* Fix QMessageBox button focus rings */
++            QMessageBox QPushButton {
++                background-color: #ffffff;
++                border: 1px solid #dee2e6;
++                border-radius: 8px;
++                padding: 8px 16px;
++                font-weight: 500;
++                min-height: 20px;
++                min-width: 60px;
++            }
++            
++            QMessageBox QPushButton:hover {
++                background-color: #e9ecef;
++                border-color: #adb5bd;
++            }
++            
++            QMessageBox QPushButton:pressed {
++                background-color: #dee2e6;
++            }
++            
++            QMessageBox QPushButton:focus {
++                border: 2px solid #0d6efd;
++                padding: 7px 15px;
++                margin: 0px;
++            }
++            
++            QMessageBox QPushButton:default {
++                background-color: #0d6efd;
++                border-color: #0d6efd;
++                color: white;
++            }
++            
++            QMessageBox QPushButton:default:hover {
++                background-color: #0b5ed7;
++                border-color: #0a58ca;
++            }
++            
++            QMessageBox QPushButton:default:focus {
++                border: 2px solid #ffffff;
++                padding: 7px 15px;
++                margin: 0px;
++            }
+         """)
+         
+         # Set primary button style

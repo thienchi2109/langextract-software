@@ -59,7 +59,7 @@
   - Write unit tests for extraction with sample templates and text
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 9. Create data aggregation and validation system
+- [x] 9. Create data aggregation and validation system
   - Implement Aggregator class for collecting and validating extraction results
   - Add data type conversion and validation based on schema field types
   - Create summary statistics calculation for aggregated data
@@ -67,7 +67,7 @@
   - Write unit tests for data aggregation and validation logic
   - _Requirements: 5.5, 10.2_
 
-- [ ] 10. Build Excel export functionality
+- [x] 10. Build Excel export functionality
   - Create ExcelExporter class using pandas and xlsxwriter
   - Implement Data sheet generation with schema-ordered columns
   - Add Summary sheet creation with grouping and aggregation
@@ -83,7 +83,7 @@
   - Write GUI tests for main window functionality
   - _Requirements: 1.1, 1.2, 1.4_
 
-- [ ] 12. Build schema editor interface
+- [x] 12. Build schema editor interface
   - Create SchemaEditor dialog for dynamic field configuration
   - Implement add/edit/delete field functionality with validation
   - Add data type selection (text/number/date/currency) with locale options
