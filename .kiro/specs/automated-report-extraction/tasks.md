@@ -131,7 +131,7 @@
   - ⏳ **Phase 4**: Integration with real processing pipeline and live updates
   - ⏳ **Phase 5**: Performance optimizations, animations, and final polish
 
-- [ ] 14. Create settings and security dialogs
+- [x] 14. Create settings and security dialogs
   - Implement SettingsDialog for OCR, API, and processing configuration
   - Add API key management interface with secure input and validation
   - Create privacy warning banners for cloud processing features

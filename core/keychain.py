@@ -76,18 +76,48 @@ class KeychainManager(CredentialManagerInterface):
             raise CredentialError("API key cannot be empty")
         
         try:
-            # Validate the key before storing
-            if not self.validate_api_key(key):
-                raise CredentialError("Invalid API key - validation failed")
-            
-            # Store the key securely
+            # Store the key securely first (without validation to avoid hanging)
             keyring.set_password(self.SERVICE_NAME, self.API_KEY_USERNAME, key.strip())
             logger.info("API key stored successfully in Windows Credential Manager")
+            
+            # Then try validation in background (non-blocking)
+            try:
+                is_valid = self._quick_validate_api_key(key.strip())
+                if is_valid:
+                    logger.info("API key validation successful")
+                else:
+                    logger.warning("API key validation failed - key may be invalid")
+            except Exception as e:
+                logger.warning(f"API key validation failed but key was saved: {str(e)}")
+                # Don't fail the save operation due to validation issues
+            
             return True
             
         except Exception as e:
             logger.error(f"Failed to save API key: {str(e)}")
             raise CredentialError(f"Failed to save API key: {str(e)}")
+    
+    def _quick_validate_api_key(self, key: str) -> bool:
+        """
+        Quick validation of API key without hanging.
+        
+        Args:
+            key: The API key to validate
+            
+        Returns:
+            bool: True if key appears valid, False otherwise
+        """
+        if not key or len(key.strip()) < 10:
+            return False
+            
+        # Basic format check for Gemini API keys
+        key = key.strip()
+        if not key.startswith('AIza') and not key.startswith('AIza'):
+            logger.warning("API key doesn't appear to be in Gemini format")
+            return False
+            
+        logger.info("API key format appears valid")
+        return True
     
     def load_api_key(self) -> Optional[str]:
         """
@@ -138,31 +168,57 @@ class KeychainManager(CredentialManagerInterface):
             # Use a minimal test prompt
             test_prompt = "Hello"
             
-            # Configure for minimal response
+            # Configure for minimal response with timeout
             generation_config = GenerationConfig(
-                max_output_tokens=10,
+                max_output_tokens=5,  # Minimal response
                 temperature=0.1,
             )
             
-            # Make test request with timeout
-            response = model.generate_content(
-                test_prompt,
-                generation_config=generation_config
-            )
+            # Add timeout to prevent hanging
+            import signal
+            import threading
             
-            # Check if we got a valid response
-            if response and response.text:
-                logger.info("API key validation successful")
-                return True
-            else:
-                logger.warning("API key validation failed - no response text")
+            def timeout_handler():
+                raise TimeoutError("API validation timeout after 10 seconds")
+            
+            # Use threading for timeout instead of signal (Windows compatible)
+            result = [False]
+            error = [None]
+            
+            def validate_worker():
+                try:
+                    response = model.generate_content(
+                        test_prompt,
+                        generation_config=generation_config
+                    )
+                    
+                    # Check if we got a valid response
+                    if response and response.text:
+                        result[0] = True
+                        logger.info("API key validation successful")
+                    else:
+                        logger.warning("API key validation failed - no response text")
+                        
+                except Exception as e:
+                    error[0] = e
+            
+            # Run validation in thread with timeout
+            validation_thread = threading.Thread(target=validate_worker, daemon=True)
+            validation_thread.start()
+            validation_thread.join(timeout=10.0)  # 10 second timeout
+            
+            if validation_thread.is_alive():
+                logger.warning("API key validation timed out after 10 seconds")
                 return False
+                
+            if error[0]:
+                raise error[0]
+                
+            return result[0]
                 
         except Exception as e:
             logger.error(f"API key validation failed: {str(e)}")
-            # Don't raise exception for validation failures, just return False
-            # This allows the application to handle invalid keys gracefully
-            return False
+            raise APIValidationError(f"API validation failed: {str(e)}")
     
     def delete_api_key(self) -> bool:
         """

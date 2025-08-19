@@ -69,6 +69,7 @@ class APIKeyWidget(QWidget):
         super().__init__(parent)
         self.keychain_manager = KeychainManager()
         self.test_thread = None
+        self.save_thread = None # Added for save_api_key
         self.setup_ui()
         self.load_current_key()
         
@@ -254,25 +255,61 @@ class APIKeyWidget(QWidget):
         api_key = self.api_key_input.text().strip()
         if not api_key:
             return
+        
+        # Disable save button to prevent double clicks
+        self.save_btn.setEnabled(False)
+        self.test_btn.setEnabled(False)
+        self.status_label.setText("🔄 Đang lưu và xác thực API key...")
+        self.status_label.setStyleSheet("color: #2196f3; font-weight: bold;")
+        
+        # Run validation and saving in background thread
+        from PySide6.QtCore import QThread
+        
+        class SaveWorker(QThread):
+            finished_signal = Signal(bool, str)
             
-        try:
-            self.keychain_manager.save_api_key(api_key)
-            self.status_label.setText("✅ API key đã được lưu an toàn")
-            self.status_label.setStyleSheet("color: #4caf50; font-weight: bold;")
+            def __init__(self, keychain_manager, api_key):
+                super().__init__()
+                self.keychain_manager = keychain_manager
+                self.api_key = api_key
             
-            QMessageBox.information(
-                self, "Thành công",
-                "API key đã được lưu an toàn vào Windows Credential Manager"
-            )
+            def run(self):
+                try:
+                    self.keychain_manager.save_api_key(self.api_key)
+                    self.finished_signal.emit(True, "API key đã được lưu an toàn")
+                except Exception as e:
+                    self.finished_signal.emit(False, str(e))
+        
+        def on_save_completed(success: bool, message: str):
+            # Re-enable buttons
+            self.save_btn.setEnabled(True)
+            has_key = bool(self.api_key_input.text().strip())
+            self.test_btn.setEnabled(has_key)
             
-        except Exception as e:
-            self.status_label.setText(f"❌ Lỗi lưu API key: {str(e)}")
-            self.status_label.setStyleSheet("color: #f44336; font-weight: bold;")
+            if success:
+                self.status_label.setText(f"✅ {message}")
+                self.status_label.setStyleSheet("color: #4caf50; font-weight: bold;")
+                
+                QMessageBox.information(
+                    self, "Thành công",
+                    "API key đã được lưu an toàn vào Windows Credential Manager"
+                )
+            else:
+                self.status_label.setText(f"❌ Lỗi lưu API key: {message}")
+                self.status_label.setStyleSheet("color: #f44336; font-weight: bold;")
+                
+                QMessageBox.critical(
+                    self, "Lỗi",
+                    f"Không thể lưu API key: {message}"
+                )
             
-            QMessageBox.critical(
-                self, "Lỗi",
-                f"Không thể lưu API key: {str(e)}"
-            )
+            # Clean up thread
+            self.save_thread = None
+        
+        # Start save worker thread
+        self.save_thread = SaveWorker(self.keychain_manager, api_key)
+        self.save_thread.finished_signal.connect(on_save_completed)
+        self.save_thread.start()
             
     def clear_api_key(self):
         """Clear API key."""

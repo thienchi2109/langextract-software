@@ -10,7 +10,7 @@ import time
 from typing import List, Optional, Dict, Any, Callable
 from dataclasses import dataclass
 from threading import Thread, Event
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal, QTimer, Slot
 
 from .models import (
     ExtractionResult, ProcessingSession, ExtractionTemplate, 
@@ -193,7 +193,18 @@ class ProcessingOrchestrator(QObject):
             logger.error(f"Critical error in processing worker: {e}", exc_info=True)
             self.processing_error.emit(f"Critical processing error: {str(e)}")
         finally:
-            self.is_processing = False
+            # Clean up from the main thread safely
+            from PySide6.QtCore import QMetaObject, Qt
+            QMetaObject.invokeMethod(
+                self, "_cleanup_from_main_thread",
+                Qt.QueuedConnection
+            )
+    
+    @Slot()
+    def _cleanup_from_main_thread(self):
+        """Clean up processing state from main thread (Qt slot)."""
+        self.is_processing = False
+        if self.progress_timer.isActive():
             self.progress_timer.stop()
     
     def _process_single_file(self, file_path: str, template: ExtractionTemplate) -> ExtractionResult:
@@ -201,22 +212,99 @@ class ProcessingOrchestrator(QObject):
         start_time = time.time()
         
         try:
-            # Step 1: Ingest file (with OCR support)
-            text_content = self.ingestor.process(file_path)
+            # Check for cancellation before starting
+            if self.should_cancel.is_set():
+                return ExtractionResult(
+                    source_file=file_path,
+                    extracted_data={},
+                    confidence_scores={},
+                    processing_time=0.0,
+                    errors=["Processing cancelled by user"],
+                    status=ProcessingStatus.CANCELLED
+                )
             
-            if not text_content or not text_content.strip():
-                raise Exception("No text content extracted from file")
+            # Step 1: Ingest file (with OCR support) - Add timeout
+            logger.info(f"Starting ingestion for: {file_path}")
+            try:
+                # Add timeout for ingestion (5 minutes max)
+                import threading
+                
+                text_content = None
+                ingestion_error = None
+                
+                def ingest_worker():
+                    nonlocal text_content, ingestion_error
+                    try:
+                        text_content = self.ingestor.process(file_path)
+                    except Exception as e:
+                        ingestion_error = e
+                
+                # Run ingestion with timeout
+                ingest_thread = threading.Thread(target=ingest_worker, daemon=True)
+                ingest_thread.start()
+                ingest_thread.join(timeout=300.0)  # 5 minute timeout
+                
+                if ingest_thread.is_alive():
+                    raise Exception(f"File ingestion timed out after 5 minutes: {file_path}")
+                
+                if ingestion_error:
+                    raise ingestion_error
+                    
+                if not text_content or not text_content.strip():
+                    raise Exception("No text content extracted from file")
+                    
+            except Exception as e:
+                logger.error(f"Ingestion failed for {file_path}: {str(e)}")
+                raise
             
-            # Step 2: Extract data using LangExtract
-            if self.extractor:
-                # Use real extractor with LangExtract
-                extraction_result = self.extractor.extract(text_content, template)
-                extracted_data = extraction_result.extracted_data
-                confidence_scores = extraction_result.confidence_scores
-            else:
-                # Fallback to simulation if extractor not available
-                extracted_data = self._simulate_extraction(text_content, template)
-                confidence_scores = self._simulate_confidence_scores(template)
+            # Check for cancellation after ingestion
+            if self.should_cancel.is_set():
+                return ExtractionResult(
+                    source_file=file_path,
+                    extracted_data={},
+                    confidence_scores={},
+                    processing_time=time.time() - start_time,
+                    errors=["Processing cancelled by user"],
+                    status=ProcessingStatus.CANCELLED
+                )
+            
+            # Step 2: Extract data using LangExtract - Add timeout
+            logger.info(f"Starting extraction for: {file_path}")
+            try:
+                if self.extractor:
+                    # Add timeout for extraction (3 minutes max)
+                    extracted_data = None
+                    confidence_scores = None
+                    extraction_error = None
+                    
+                    def extract_worker():
+                        nonlocal extracted_data, confidence_scores, extraction_error
+                        try:
+                            extraction_result = self.extractor.extract(text_content, template)
+                            extracted_data = extraction_result.extracted_data
+                            confidence_scores = extraction_result.confidence_scores
+                        except Exception as e:
+                            extraction_error = e
+                    
+                    # Run extraction with timeout
+                    extract_thread = threading.Thread(target=extract_worker, daemon=True)
+                    extract_thread.start()
+                    extract_thread.join(timeout=180.0)  # 3 minute timeout
+                    
+                    if extract_thread.is_alive():
+                        raise Exception(f"Data extraction timed out after 3 minutes: {file_path}")
+                    
+                    if extraction_error:
+                        raise extraction_error
+                        
+                else:
+                    # Fallback to simulation if extractor not available
+                    extracted_data = self._simulate_extraction(text_content, template)
+                    confidence_scores = self._simulate_confidence_scores(template)
+                    
+            except Exception as e:
+                logger.error(f"Extraction failed for {file_path}: {str(e)}")
+                raise
             
             processing_time = time.time() - start_time
             
@@ -231,13 +319,15 @@ class ProcessingOrchestrator(QObject):
             
         except Exception as e:
             processing_time = time.time() - start_time
+            error_msg = str(e)
+            logger.error(f"Processing failed for {file_path}: {error_msg}")
             
             return ExtractionResult(
                 source_file=file_path,
                 extracted_data={},
                 confidence_scores={},
                 processing_time=processing_time,
-                errors=[str(e)],
+                errors=[error_msg],
                 status=ProcessingStatus.FAILED
             )
     

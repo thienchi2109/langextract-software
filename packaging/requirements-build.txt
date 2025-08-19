@@ -1,0 +1,45 @@
+# Build Requirements for LangExtractor Windows Executable
+# Install with: pip install -r requirements-build.txt
+
+# PyInstaller for executable creation
+pyinstaller>=5.13.0
+
+# UPX for executable compression (optional)
+# Note: UPX binary must be installed separately and available in PATH
+# Download from: https://upx.github.io/
+
+# Build tools
+setuptools>=68.0.0
+wheel>=0.41.0
+
+# All runtime dependencies (from main requirements.txt)
+# GUI Framework
+PySide6>=6.5.0
+
+# Document Processing
+PyMuPDF>=1.23.0
+python-docx>=0.8.11
+openpyxl>=3.1.0
+
+# OCR
+easyocr>=1.7.0
+
+# AI/ML
+langextract>=0.1.0
+google-generativeai>=0.3.0
+
+# Data Processing
+pandas>=2.0.0
+xlsxwriter>=3.1.0
+
+# Charting and Visualization
+matplotlib>=3.7.0
+pyqtgraph>=0.13.0
+
+# Utilities
+requests>=2.31.0
+Pillow>=10.0.0
+keyring>=24.0.0
+
+# Optional: NSIS for installer creation
+# Download separately from: https://nsis.sourceforge.io/ 
