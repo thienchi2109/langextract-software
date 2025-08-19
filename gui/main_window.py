@@ -7,6 +7,7 @@ Features:
 - File list with status indicators
 - Progress tracking and cancellation
 - Menu structure and toolbar
+- Integrated analytics dashboard with charts (Phase 4)
 """
 
 import os
@@ -17,11 +18,16 @@ from PySide6.QtCore import Qt, Signal, QTimer, QMimeData, QUrl
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QProgressBar, QStatusBar, QMenuBar, QMenu, QToolBar, QLabel,
-    QFrame, QSplitter, QMessageBox, QFileDialog, QApplication
+    QFrame, QSplitter, QMessageBox, QFileDialog, QApplication, QDialog
 )
 from PySide6.QtGui import QAction, QIcon, QDragEnterEvent, QDropEvent, QDragMoveEvent, QPainter, QPen
 from gui.theme import get_theme_manager
-from gui.preview_panel import PreviewPanel
+from gui.enhanced_preview_panel import EnhancedPreviewPanel
+from core.processing_orchestrator import ProcessingOrchestrator, ProcessingProgress
+from core.excel_exporter import ExcelExporter
+from core.aggregator import Aggregator
+from datetime import datetime
+from gui.schema_editor import SchemaEditor
 
 logger = logging.getLogger(__name__)
 
@@ -165,12 +171,19 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.theme_manager = get_theme_manager()
         self.drop_overlay = None
+        
+        # Initialize processing orchestrator (Phase 4)
+        self.processing_orchestrator = ProcessingOrchestrator(self)
+        
+        # Current extraction template
+        self.current_template = None
+        
         self.setup_ui()
         self.setup_drag_drop()
         self.setup_theme()
         self.setup_connections()
         
-        logger.info("MainWindow initialized")
+        logger.info("MainWindow initialized with Phase 4 real-time processing")
     
     def setup_ui(self):
         """Setup the user interface."""
@@ -301,7 +314,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
         
         # Create preview panel
-        self.preview_panel = PreviewPanel()
+        self.preview_panel = EnhancedPreviewPanel()
         layout.addWidget(self.preview_panel, 1)  # Give it stretch factor of 1
         
         # Process button
@@ -310,6 +323,57 @@ class MainWindow(QMainWindow):
         self.process_btn.setEnabled(False)
         self.process_btn.clicked.connect(self.start_processing)
         layout.addWidget(self.process_btn)
+        
+        # Schema Editor button
+        self.schema_btn = QPushButton("⚙️ Configure Schema")
+        self.schema_btn.setIcon(self.theme_manager.create_icon("settings"))
+        self.schema_btn.clicked.connect(self.open_schema_editor)
+        self.schema_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6366F1;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #5B21B6;
+            }
+            QPushButton:pressed {
+                background-color: #4C1D95;
+            }
+        """)
+        layout.addWidget(self.schema_btn)
+        
+        # Export Excel button
+        self.export_btn = QPushButton("�� Export to Excel")
+        self.export_btn.setIcon(self.theme_manager.create_icon("file-xlsx"))
+        self.export_btn.setEnabled(False)  # Disabled until processing is complete
+        self.export_btn.clicked.connect(self.export_to_excel)
+        self.export_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #16A34A;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #15803D;
+            }
+            QPushButton:pressed {
+                background-color: #166534;
+            }
+            QPushButton:disabled {
+                background-color: #9CA3AF;
+                color: #6B7280;
+            }
+        """)
+        layout.addWidget(self.export_btn)
         
         return panel
     
@@ -347,6 +411,16 @@ class MainWindow(QMainWindow):
         
         file_menu.addSeparator()
         
+        # Export Excel action
+        export_excel_action = QAction("Export to Excel...", self)
+        export_excel_action.setShortcut("Ctrl+E")
+        export_excel_action.triggered.connect(self.export_to_excel)
+        export_excel_action.setEnabled(False)  # Will be enabled after processing
+        self.export_excel_action = export_excel_action  # Store reference for enabling later
+        file_menu.addAction(export_excel_action)
+        
+        file_menu.addSeparator()
+        
         exit_action = QAction("Exit", self)
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
@@ -359,6 +433,14 @@ class MainWindow(QMainWindow):
         toggle_theme_action.setShortcut("Ctrl+T")
         toggle_theme_action.triggered.connect(self.toggle_theme)
         view_menu.addAction(toggle_theme_action)
+        
+        # Tools menu
+        tools_menu = menubar.addMenu("Tools")
+        
+        schema_action = QAction("Configure Schema...", self)
+        schema_action.setShortcut("Ctrl+S")
+        schema_action.triggered.connect(self.open_schema_editor)
+        tools_menu.addAction(schema_action)
         
         # Help menu
         help_menu = menubar.addMenu("Help")
@@ -419,22 +501,34 @@ class MainWindow(QMainWindow):
         
         # Theme change signal
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
+        
+        # Processing orchestrator signals (Phase 4)
+        self.processing_orchestrator.progress_updated.connect(self.on_processing_progress)
+        self.processing_orchestrator.file_completed.connect(self.on_file_completed)
+        self.processing_orchestrator.session_updated.connect(self.on_session_updated)
+        self.processing_orchestrator.processing_completed.connect(self.on_processing_completed)
+        self.processing_orchestrator.processing_error.connect(self.on_processing_error)
     
     def update_ui_state(self):
         """Update UI state based on current conditions."""
         has_files = self.file_list.count() > 0
         has_selection = len(self.file_list.selectedItems()) > 0
+        has_template = self.current_template is not None
         
         self.remove_files_btn.setEnabled(has_selection)
         self.clear_all_btn.setEnabled(has_files)
-        self.process_btn.setEnabled(has_files)
+        # Enable processing only when we have both files and a configured template
+        self.process_btn.setEnabled(has_files and has_template)
         
         # Update status bar
         file_count = self.file_list.count()
         if file_count == 0:
-            self.status_bar.showMessage("Ready")
+            self.status_bar.showMessage("Ready - Add files and configure schema to begin")
+        elif not has_template:
+            self.status_bar.showMessage(f"{file_count} file(s) loaded - Configure schema to enable processing")
         else:
-            self.status_bar.showMessage(f"{file_count} file(s) loaded")
+            template_info = f"Schema: '{self.current_template.name}' ({len(self.current_template.fields)} fields)"
+            self.status_bar.showMessage(f"{file_count} file(s) loaded - {template_info} - Ready to process!")
     
     def on_file_selection_changed(self):
         """Handle file selection changes to update preview."""
@@ -832,19 +926,244 @@ class MainWindow(QMainWindow):
             self.show_toast_message(f"Cleared {file_count} file(s)", "info")
 
     def start_processing(self):
-        """Start processing files."""
+        """Start processing files using the orchestrator."""
         file_paths = self.file_list.get_file_paths()
         if not file_paths:
             return
 
-        # TODO: Implement actual processing
-        self.show_toast_message(f"Processing {len(file_paths)} file(s)...", "info")
-        logger.info(f"Started processing {len(file_paths)} files")
+        # Check if we have a configured template
+        if not self.current_template:
+            self.show_toast_message("Please configure extraction schema first", "warning")
+            self.open_schema_editor()
+            return
+        
+        # Use the real user-configured template
+        template = self.current_template
 
-        # Simulate progress
-        self.show_progress("Processing files...", 0, len(file_paths))
+        # Start processing session in charts
+        self.preview_panel.start_processing_session()
+        
+        # Reset UI for new processing session
+        self.start_new_processing()
+        
+        # Start processing with orchestrator
+        success = self.processing_orchestrator.start_processing(file_paths, template)
+        
+        if success:
+            self.show_toast_message(
+                f"Started processing {len(file_paths)} file(s) with schema '{template.name}'...", 
+                "info"
+            )
+            logger.info(f"Started real-time processing {len(file_paths)} files with template: {template.name}")
+            
+            # Update UI state for processing
+            self.process_btn.setText("Cancel Processing")
+            self.process_btn.clicked.disconnect()
+            self.process_btn.clicked.connect(self.cancel_processing)
+        else:
+            self.show_toast_message("Failed to start processing", "error")
+    
+    def cancel_processing(self):
+        """Cancel current processing."""
+        self.processing_orchestrator.cancel_processing()
+        self.show_toast_message("Processing cancelled", "warning")
+        self._reset_processing_ui()
+    
+    def _reset_processing_ui(self):
+        """Reset UI to non-processing state."""
+        self.process_btn.setText("Start Processing")
+        self.process_btn.clicked.disconnect()
+        self.process_btn.clicked.connect(self.start_processing)
+        self.hide_progress()
+    
+    def start_new_processing(self):
+        """Reset UI for new processing session."""
+        # Disable export button until new processing completes
+        self.export_btn.setEnabled(False)
+        
+        # Disable export menu action
+        if hasattr(self, 'export_excel_action'):
+            self.export_excel_action.setEnabled(False)
+        
+        # Clear previous session
+        if hasattr(self, 'completed_session'):
+            delattr(self, 'completed_session')
+    
+    # Processing orchestrator signal handlers (Phase 4)
+    def on_processing_progress(self, progress: ProcessingProgress):
+        """Handle processing progress updates."""
+        self.show_progress(
+            f"Processing {progress.current_file_name}...",
+            progress.current_file,
+            progress.total_files
+        )
+        
+        # Update status with detailed info
+        elapsed_min = int(progress.elapsed_time // 60)
+        elapsed_sec = int(progress.elapsed_time % 60)
+        remaining_min = int(progress.estimated_remaining // 60) if progress.estimated_remaining > 0 else 0
+        
+        status_message = (
+            f"Processing {progress.current_file}/{progress.total_files} files | "
+            f"Elapsed: {elapsed_min}:{elapsed_sec:02d} | "
+            f"Est. remaining: {remaining_min} min"
+        )
+        self.status_bar.showMessage(status_message)
+    
+    def on_file_completed(self, result):
+        """Handle individual file completion."""
+        # File preview could be updated here if needed
+        logger.debug(f"File completed: {result.source_file}")
+    
+    def on_session_updated(self, session):
+        """Handle session updates for real-time chart updates."""
+        # Update charts with new data
+        self.preview_panel.update_summary_preview(session)
+        logger.debug("Charts updated with new session data")
+    
+    def on_processing_completed(self, session):
+        """Handle processing completion."""
+        self.show_toast_message(
+            f"Processing completed! {len(session.results)} files processed.", 
+            "success"
+        )
+        
+        # Final chart update
+        self.preview_panel.update_summary_preview(session)
+        
+        # Enable Excel export button
+        self.export_btn.setEnabled(True)
+        
+        # Enable Excel export menu action
+        if hasattr(self, 'export_excel_action'):
+            self.export_excel_action.setEnabled(True)
+        
+        # Store session for export
+        self.completed_session = session
+        
+        # Reset UI
+        self._reset_processing_ui()
+        self.status_bar.showMessage(f"Completed: {len(session.results)} files processed - Ready to export!")
+        
+        logger.info(f"Processing completed: {len(session.results)} files")
+    
+    def export_to_excel(self):
+        """Export processed results to Excel file."""
+        if not hasattr(self, 'completed_session') or not self.completed_session:
+            self.show_toast_message("No processing results available for export", "warning")
+            return
+        
+        try:
+            # Get export location
+            export_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export to Excel",
+                f"extraction_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                "Excel Files (*.xlsx)"
+            )
+            
+            if not export_path:
+                return  # User cancelled
+            
+            # Show progress
+            self.show_toast_message("Generating Excel file...", "info")
+            self.status_bar.showMessage("Exporting to Excel...")
+            
+            # Initialize components
+            aggregator = Aggregator(self.completed_session.template)
+            excel_exporter = ExcelExporter(self.completed_session.template)
+            
+            # Aggregate results
+            aggregation_result = aggregator.aggregate_results(self.completed_session.results)
+            
+            # Export to Excel
+            output_file = excel_exporter.export_results(
+                aggregation_result, 
+                export_path,
+                include_charts=True,
+                include_validation=True
+            )
+            
+            # Success feedback
+            self.show_toast_message(f"Excel file exported successfully!", "success")
+            self.status_bar.showMessage(f"Exported to: {output_file}")
+            
+            # Ask if user wants to open the file
+            reply = QMessageBox.question(
+                self, "Export Complete",
+                f"Excel file exported successfully to:\n{output_file}\n\nDo you want to open it now?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            
+            if reply == QMessageBox.Yes:
+                import os
+                import subprocess
+                import platform
+                
+                # Open file with default application
+                if platform.system() == 'Windows':
+                    os.startfile(output_file)
+                elif platform.system() == 'Darwin':  # macOS
+                    subprocess.call(['open', output_file])
+                else:  # Linux
+                    subprocess.call(['xdg-open', output_file])
+            
+            logger.info(f"Excel export completed: {output_file}")
+            
+        except Exception as e:
+            error_msg = f"Excel export failed: {str(e)}"
+            self.show_toast_message(error_msg, "error")
+            logger.error(error_msg, exc_info=True)
+            
+            # Show detailed error dialog
+            QMessageBox.critical(
+                self, "Export Error",
+                f"Failed to export Excel file:\n\n{str(e)}\n\nPlease check the file path and try again."
+            )
+    
+    def open_schema_editor(self):
+        """Open schema editor dialog for configuring extraction template."""
+        try:
+            # Create schema editor dialog
+            dialog = SchemaEditor(template=self.current_template, parent=self)
+            
+            # Show dialog and get result
+            if dialog.exec() == QDialog.Accepted:
+                # Get the configured template
+                new_template = dialog.get_template()
+                
+                if new_template:
+                    self.current_template = new_template
+                    
+                    # Update UI to reflect template is configured
+                    self.show_toast_message(
+                        f"Schema configured: {len(new_template.fields)} fields defined",
+                        "success"
+                    )
+                    
+                    # Update status
+                    self.status_bar.showMessage(
+                        f"Schema: '{new_template.name}' with {len(new_template.fields)} fields - Ready to process!"
+                    )
+                    
+                    # Update process button state
+                    self.update_ui_state()
+                    
+                    logger.info(f"Schema configured: {new_template.name} with {len(new_template.fields)} fields")
+                else:
+                    self.show_toast_message("No valid schema configured", "warning")
+            
+        except Exception as e:
+            error_msg = f"Failed to open schema editor: {str(e)}"
+            self.show_toast_message(error_msg, "error")
+            logger.error(error_msg, exc_info=True)
 
-        # TODO: Connect to actual processing pipeline
+    def on_processing_error(self, error_message: str):
+        """Handle processing errors."""
+        self.show_toast_message(f"Processing error: {error_message}", "error")
+        self._reset_processing_ui()
+        logger.error(f"Processing error: {error_message}")
 
     def show_progress(self, message: str, current: int, total: int):
         """Show progress bar with message."""

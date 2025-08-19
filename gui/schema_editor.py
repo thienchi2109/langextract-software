@@ -9,6 +9,7 @@ import json
 import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
+import unicodedata
 
 from PySide6.QtCore import Qt, QSettings, QTimer
 from PySide6.QtWidgets import (
@@ -350,8 +351,9 @@ class SchemaEditor(QDialog):
 
     def populate_row(self, row: int, field: ExtractionField):
         """Populate a table row with field data."""
-        # Name column
-        name_edit = QLineEdit(field.name)
+        # Name column - use display_name if available, otherwise use field.name
+        display_name = getattr(field, 'display_name', field.name) if hasattr(field, 'display_name') else field.name
+        name_edit = QLineEdit(display_name)
         name_edit.textChanged.connect(self.on_field_changed)
         self.table.setCellWidget(row, self.COL_NAME, name_edit)
 
@@ -592,11 +594,11 @@ class SchemaEditor(QDialog):
                     'column': self.COL_NAME,
                     'message': 'Tên trường không được để trống'
                 })
-            elif not re.match(r'^[a-z][a-z0-9_]{1,63}$', name):
+            elif len(name) > 100:
                 errors.append({
                     'row': row,
                     'column': self.COL_NAME,
-                    'message': 'Tên trường phải theo định dạng snake_case (a-z, 0-9, _)'
+                    'message': f'Tên trường quá dài ({len(name)}/100 ký tự)'
                 })
             elif name.lower() in self.RESERVED_NAMES:
                 errors.append({
@@ -743,13 +745,18 @@ class SchemaEditor(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Lỗi", f"Không thể xuất template: {str(e)}")
 
-    def get_template(self) -> Dict[str, Any]:
+    def get_template(self) -> Optional[ExtractionTemplate]:
         """
-        Get the current template data.
+        Get the current template as ExtractionTemplate object.
 
         Returns:
-            Dict containing template data with fields in table order
+            ExtractionTemplate object or None if validation fails
         """
+        # Validate first
+        errors = self._collect_errors()
+        if errors:
+            return None
+            
         fields = []
 
         for row in range(self.table.rowCount()):
@@ -772,27 +779,79 @@ class SchemaEditor(QDialog):
             optional_checkbox = optional_widget.findChild(QCheckBox)
             optional = optional_checkbox.isChecked() if optional_checkbox else False
 
-            # Build field data
-            field_data = {
-                'name': name,
-                'type': field_type,
-                'description': description,
-                'optional': optional
-            }
+            # Convert Vietnamese name to snake_case for API
+            api_name = self._convert_to_snake_case(name)
 
-            # Add number_locale only for currency fields
+            # Create ExtractionField object
+            try:
+                field_type_enum = FieldType(field_type)
+            except ValueError:
+                field_type_enum = FieldType.TEXT  # Fallback
+                
+            extraction_field = ExtractionField(
+                name=api_name,
+                type=field_type_enum,
+                description=description,
+                optional=optional
+            )
+            
+            # Store display name as custom attribute
+            extraction_field.display_name = name
+
+            # Add number_locale for currency fields
             if field_type == 'currency' and isinstance(locale_widget, QComboBox):
                 locale_data = locale_widget.currentData()
                 if locale_data:
-                    field_data['number_locale'] = locale_data
+                    extraction_field.number_locale = locale_data
 
-            fields.append(field_data)
+            fields.append(extraction_field)
 
-        return {
-            'name': getattr(self.template, 'name', 'New Template') if self.template else 'New Template',
-            'prompt_description': getattr(self.template, 'prompt_description', '') if self.template else '',
-            'fields': fields
-        }
+        # Create template name dialog if this is a new template
+        template_name = "New Template"
+        if self.template and hasattr(self.template, 'name'):
+            template_name = self.template.name
+        elif not self.template:
+            # Ask user for template name
+            from PySide6.QtWidgets import QInputDialog
+            name, ok = QInputDialog.getText(
+                self,
+                "Template Name",
+                "Enter a name for this extraction template:",
+                text="Vietnamese Financial Reports"
+            )
+            if ok and name.strip():
+                template_name = name.strip()
+
+        # Create ExtractionTemplate object
+        template = ExtractionTemplate(
+            name=template_name,
+            prompt_description=f"Extract data from documents using {len(fields)} defined fields",
+            fields=fields,
+            examples=[],  # TODO: Could be enhanced to include examples
+            provider={"name": "gemini", "model": "gemini-2.5-flash"},
+            run_options={"max_retries": 3, "timeout": 30}
+        )
+
+        return template
+
+    def _convert_to_snake_case(self, name: str) -> str:
+        """
+        Converts a Vietnamese name to snake_case for API.
+        This is a simplified example and might need more sophisticated handling
+        for complex Vietnamese names.
+        """
+        # Remove diacritics (e.g., "đ" -> "d")
+        name = ''.join(c for c in unicodedata.normalize('NFD', name) if unicodedata.category(c) != 'Mn')
+        
+        # Split by spaces and join with underscores
+        parts = name.split()
+        snake_case_name = '_'.join(part.lower() for part in parts)
+        
+        # Ensure it starts with a letter or number
+        if not snake_case_name or not snake_case_name[0].isalnum():
+            snake_case_name = 'field_' + snake_case_name
+            
+        return snake_case_name
 
     def restore_geometry(self):
         """Restore dialog geometry from settings."""
