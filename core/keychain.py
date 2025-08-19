@@ -21,6 +21,25 @@ from .exceptions import CredentialError, APIValidationError
 
 logger = logging.getLogger(__name__)
 
+def _get_available_gemini_model():
+    """
+    Get the best available Gemini model for validation.
+    
+    Returns:
+        str: Model name that should be available
+    """
+    # Preferred models in order of preference
+    preferred_models = [
+        'gemini-2.5-pro',
+        'gemini-1.5-pro', 
+        'gemini-1.5-flash',
+        'gemini-pro'
+    ]
+    
+    # For now, return the latest available model
+    # In the future, this could make an API call to list models
+    return preferred_models[0]
+
 
 class KeychainManager(CredentialManagerInterface):
     """
@@ -162,8 +181,10 @@ class KeychainManager(CredentialManagerInterface):
             # Configure Gemini API with the key
             genai.configure(api_key=key.strip())
             
-            # Test the API with a simple request
-            model = genai.GenerativeModel('gemini-pro')
+            # Test the API with a simple request using current model
+            model_name = _get_available_gemini_model()
+            logger.info(f"Testing API key with model: {model_name}")
+            model = genai.GenerativeModel(model_name)
             
             # Use a minimal test prompt
             test_prompt = "Hello"

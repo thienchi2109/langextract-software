@@ -828,7 +828,7 @@ class SchemaEditor(QDialog):
             prompt_description=f"Extract data from documents using {len(fields)} defined fields",
             fields=fields,
             examples=[],  # TODO: Could be enhanced to include examples
-            provider={"name": "gemini", "model": "gemini-2.5-flash"},
+            provider={"name": "gemini", "model": "gemini-2.5-pro"},
             run_options={"max_retries": 3, "timeout": 30}
         )
 

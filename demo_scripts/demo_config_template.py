@@ -87,7 +87,7 @@ def demo_template_management():
                 "report_date": "2024-12-31"
             }
         ],
-        provider={"name": "gemini", "model": "gemini-pro"},
+        provider={"name": "gemini", "model": "gemini-2.5-pro"},
         run_options={"temperature": 0.1, "max_tokens": 1000}
     )
     

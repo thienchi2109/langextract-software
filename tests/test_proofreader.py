@@ -89,7 +89,7 @@ class TestProofreader:
             offline_mode=True,
             api_timeout=60,
             correction_mode='business',
-            model_name='gemini-pro',
+            model_name='gemini-2.5-pro',
             keychain_manager=mock_keychain,
             pii_masker=mock_pii_masker
         )
@@ -98,7 +98,7 @@ class TestProofreader:
         assert proofreader.offline_mode is True
         assert proofreader.api_timeout == 60
         assert proofreader.correction_mode == 'business'
-        assert proofreader.model_name == 'gemini-pro'
+        assert proofreader.model_name == 'gemini-2.5-pro'
         assert proofreader.keychain_manager is mock_keychain
         assert proofreader.pii_masker is mock_pii_masker
     

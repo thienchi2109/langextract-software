@@ -52,7 +52,7 @@ class TestTemplateManager:
             prompt_description="Extract financial information from reports",
             fields=fields,
             examples=[{"company_name": "ABC Corp", "revenue": "1000000"}],
-            provider={"name": "gemini", "model": "gemini-pro"},
+            provider={"name": "gemini", "model": "gemini-2.5-pro"},
             run_options={"temperature": 0.1}
         )
     
