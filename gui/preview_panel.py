@@ -718,21 +718,41 @@ class SummaryPreviewWidget(QWidget):
     
     def setup_ui(self):
         """Setup the summary preview UI."""
-        layout = QVBoxLayout(self)
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Create scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        # Content widget
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(16)
-        
+
         # Processing statistics section
         self.create_processing_stats_section(layout)
-        
+
         # Data quality section
         self.create_data_quality_section(layout)
-        
+
         # Field statistics section
         self.create_field_stats_section(layout)
-        
+
         layout.addStretch()
-        
+
+        # Set content widget to scroll area
+        scroll_area.setWidget(content_widget)
+        main_layout.addWidget(scroll_area)
+
+        # Store reference to content layout for dynamic updates
+        self.content_layout = layout
+
         # Show empty state initially
         self.show_empty_state()
     
@@ -762,18 +782,32 @@ class SummaryPreviewWidget(QWidget):
     def create_data_quality_section(self, parent_layout):
         """Create data quality metrics section."""
         self.quality_group = QGroupBox("Data Quality")
+        self.quality_group.setMinimumHeight(200)
+        self.quality_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+
         quality_layout = QVBoxLayout(self.quality_group)
-        
+
+        # Set proper spacing and margins for better text visibility
+        quality_layout.setContentsMargins(12, 12, 12, 12)
+        quality_layout.setSpacing(8)
+
         # Quality indicators will be added dynamically
         self.quality_layout = quality_layout
-        
+
         parent_layout.addWidget(self.quality_group)
     
     def create_field_stats_section(self, parent_layout):
         """Create field statistics section."""
         self.field_stats_group = QGroupBox("Field Statistics")
+        self.field_stats_group.setMinimumHeight(300)
+        self.field_stats_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+
         self.field_stats_layout = QVBoxLayout(self.field_stats_group)
-        
+
+        # Set proper spacing and margins for better text visibility
+        self.field_stats_layout.setContentsMargins(12, 12, 12, 12)
+        self.field_stats_layout.setSpacing(8)
+
         parent_layout.addWidget(self.field_stats_group)
     
     def show_empty_state(self):
@@ -897,7 +931,9 @@ class SummaryPreviewWidget(QWidget):
         
         # Quality description
         desc_layout = QVBoxLayout()
-        desc_layout.addWidget(QLabel("Overall Data Quality"))
+        desc_title = QLabel("Overall Data Quality")
+        desc_title.setStyleSheet("color: #374151; font-weight: 500;")
+        desc_layout.addWidget(desc_title)
         
         if overall_quality >= 0.9:
             quality_desc = "Excellent"
@@ -969,7 +1005,10 @@ class SummaryPreviewWidget(QWidget):
             
             # Label
             label_widget = QLabel(label)
-            label_widget.setMinimumWidth(100)
+            label_widget.setMinimumWidth(120)
+            label_widget.setMinimumHeight(24)
+            label_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            label_widget.setStyleSheet("color: #374151;")
             bar_layout.addWidget(label_widget)
             
             # Progress bar
@@ -994,7 +1033,10 @@ class SummaryPreviewWidget(QWidget):
             percentage = (count / total_count * 100) if total_count > 0 else 0
             count_label = QLabel(f"{count} ({percentage:.1f}%)")
             count_label.setStyleSheet(f"color: {color}; font-weight: 600;")
-            count_label.setMinimumWidth(80)
+            count_label.setMinimumWidth(90)
+            count_label.setMinimumHeight(24)
+            count_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            count_label.setAlignment(Qt.AlignCenter)
             bar_layout.addWidget(count_label)
             
             dist_layout.addLayout(bar_layout)
@@ -1041,10 +1083,15 @@ class SummaryPreviewWidget(QWidget):
             
             # Field name
             name_label = QLabel(field_name)
-            name_label.setMinimumWidth(120)
+            name_label.setMinimumWidth(140)
+            name_label.setMinimumHeight(24)
+            name_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            name_label.setWordWrap(True)
             if field.optional:
                 name_label.setText(f"{field_name} (optional)")
                 name_label.setStyleSheet("color: #6B7280;")
+            else:
+                name_label.setStyleSheet("color: #1F2937; font-weight: 500;")
             field_layout.addWidget(name_label)
             
             # Completeness bar
@@ -1079,7 +1126,10 @@ class SummaryPreviewWidget(QWidget):
             # Percentage
             perc_label = QLabel(f"{completeness:.1%}")
             perc_label.setStyleSheet(f"color: {color}; font-weight: 600;")
-            perc_label.setMinimumWidth(60)
+            perc_label.setMinimumWidth(70)
+            perc_label.setMinimumHeight(24)
+            perc_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            perc_label.setAlignment(Qt.AlignCenter)
             field_layout.addWidget(perc_label)
             
             comp_layout.addLayout(field_layout)
@@ -1115,30 +1165,51 @@ class SummaryPreviewWidget(QWidget):
             # Create field stat widget
             field_frame = QFrame()
             field_frame.setFrameShape(QFrame.Box)
-            field_frame.setStyleSheet("border: 1px solid @border; border-radius: 4px; padding: 8px;")
+            field_frame.setStyleSheet("""
+                QFrame {
+                    border: 1px solid #E2E8F0;
+                    border-radius: 4px;
+                    padding: 8px;
+                    background-color: #FFFFFF;
+                }
+            """)
             field_layout = QHBoxLayout(field_frame)
-            
+            field_layout.setContentsMargins(8, 8, 8, 8)
+            field_layout.setSpacing(12)
+
             # Field name
             name_label = QLabel(field_name)
-            name_label.setStyleSheet("font-weight: 600;")
-            name_label.setMinimumWidth(120)
+            name_label.setStyleSheet("font-weight: 600; color: #1F2937;")
+            name_label.setMinimumWidth(140)
+            name_label.setMinimumHeight(24)
+            name_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            name_label.setWordWrap(True)
             field_layout.addWidget(name_label)
-            
+
             # Completeness
             completeness = len(values) / len(completed_results) if completed_results else 0
             completeness_label = QLabel(f"Complete: {completeness:.1%}")
+            completeness_label.setStyleSheet("color: #374151;")
+            completeness_label.setMinimumWidth(100)
+            completeness_label.setMinimumHeight(24)
+            completeness_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
             field_layout.addWidget(completeness_label)
-            
+
             # Average confidence
             if confidences:
                 avg_confidence = sum(confidences) / len(confidences)
                 conf_indicator = ConfidenceIndicator(avg_confidence)
+                conf_indicator.setMinimumWidth(80)
                 field_layout.addWidget(conf_indicator)
             else:
                 no_data_label = QLabel("No data")
                 no_data_label.setStyleSheet("color: #6B7280; font-style: italic;")
+                no_data_label.setMinimumWidth(80)
                 field_layout.addWidget(no_data_label)
-            
+
+            # Add stretch to push everything to the left
+            field_layout.addStretch()
+
             self.field_stats_layout.addWidget(field_frame)
 
 
