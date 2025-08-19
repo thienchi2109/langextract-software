@@ -19,7 +19,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from gui.simple_main_window import SimpleMainWindow
 

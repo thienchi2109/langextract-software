@@ -14,7 +14,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from gui.settings_dialog import SettingsDialog
 from core.models import AppConfig

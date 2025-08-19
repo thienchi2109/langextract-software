@@ -4,12 +4,17 @@ A Windows desktop application for extracting structured data from various docume
 
 ## 🚀 **Quick Start**
 
-### **Launch the Complete Application:**
+### **Method 1: Use the Launcher (Recommended):**
+```bash
+python launch_app.py
+```
+
+### **Method 2: Run from demo_scripts directory:**
 ```bash
 python demo_scripts/demo_complete_with_settings.py
 ```
 
-### **Or try the Simplified Version:**
+### **Method 3: Try the Simplified Version:**
 ```bash
 python demo_scripts/demo_simple_app.py
 ```
@@ -70,6 +75,10 @@ python demo_scripts/demo_simple_app.py
 
 3. **Launch application:**
    ```bash
+   # Method 1: Use the launcher (easiest)
+   python launch_app.py
+   
+   # Method 2: Run directly from demo_scripts
    python demo_scripts/demo_complete_with_settings.py
    ```
 

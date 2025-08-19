@@ -32,10 +32,13 @@ Thư mục này chứa các demo scripts để test và showcase các tính năn
 
 ### **Bắt đầu với ứng dụng hoàn chỉnh:**
 ```bash
-# GUI hoàn chỉnh với Settings
+# Method 1: Dùng launcher từ root directory (khuyến nghị)
+python launch_app.py
+
+# Method 2: Chạy trực tiếp từ demo_scripts  
 python demo_scripts/demo_complete_with_settings.py
 
-# Hoặc ứng dụng đơn giản
+# Method 3: Ứng dụng đơn giản
 python demo_scripts/demo_simple_app.py
 ```
 
@@ -71,4 +74,6 @@ python demo_scripts/demo_task10_excel.py
 - Cần API key Gemini để sử dụng AI extraction
 - Lấy miễn phí tại: https://aistudio.google.com/app/apikey
 - Demo scripts được organize theo thứ tự phát triển (tasks)
-- Legacy scripts vẫn được giữ để tham khảo 
+- Legacy scripts vẫn được giữ để tham khảo
+- **Import paths đã được sửa** để chạy từ demo_scripts/ directory
+- **Khuyến nghị**: Dùng `python launch_app.py` từ root directory để dễ dàng nhất 

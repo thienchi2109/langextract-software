@@ -6,11 +6,11 @@ and tests the button highlight behavior.
 """
 
 import sys
+import os
 from pathlib import Path
 
 # Add project root to path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QMessageBox
 from PySide6.QtCore import Qt
