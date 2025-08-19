@@ -77,6 +77,11 @@ def save_config(config: AppConfig) -> None:
         )
 
 
+# Aliases for compatibility
+load_app_config = load_config
+save_app_config = save_config
+
+
 def validate_file_path(file_path: str, must_exist: bool = True) -> Path:
     """
     Validate and convert file path to Path object.
