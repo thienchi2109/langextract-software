@@ -360,11 +360,11 @@ class OCRSettingsWidget(QWidget):
         """Load settings từ config."""
         self.ocr_enabled_cb.setChecked(self.config.ocr_enabled)
         
-        # Language mapping
+        # Language mapping - use tuples instead of lists for dictionary keys
         lang_map = {
-            ['vi', 'en']: 0,
-            ['vi']: 1,
-            ['en']: 2
+            ('en', 'vi'): 0,  # Vietnamese + English (sorted)
+            ('vi',): 1,       # Vietnamese only
+            ('en',): 2        # English only
         }
         lang_key = tuple(sorted(self.config.ocr_languages))
         index = lang_map.get(lang_key, 0)
